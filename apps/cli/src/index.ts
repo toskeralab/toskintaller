@@ -145,6 +145,21 @@ program
     }
   });
 
+// UI command — serve wizard + API local (127.0.0.1:3000)
+program
+  .command("ui")
+  .description("Abre o wizard interativo (React) com API local em 127.0.0.1:3000")
+  .option("--port <port>", "porta do servidor local", "3000")
+  .action(async (opts) => {
+    try {
+      const server = await import("./server/index.ts");
+    } catch (err) {
+      console.error("✖ nao foi possivel iniciar o servidor UI: " + (err && Object.prototype.hasOwnProperty.call(err,"message") ? (err as any).message : String(err)));
+      process.exitCode = 1;
+    }
+  });
+
+
 program.parseAsync(process.argv).catch((err) => {
   console.error(`✖ ${(err as Error).message}`);
   process.exitCode = 1;

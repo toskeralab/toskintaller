@@ -14,3 +14,4 @@ Toskinstaller é um app para criação de executáveis e instaladores de apps de
 | 3 — Implementação | [docs/SPIKE_ITERACAO_0.md](./docs/SPIKE_ITERACAO_0.md) | Relatório do spike técnico (Iteração 0): NSIS 5 estilos, pipeline, reprodutibilidade |
 | 3 — Implementação | [docs/ITERACAO_1.md](./docs/ITERACAO_1.md) | Iteração 1 entregue: standalone + installer, S0.1/S0.2 validados, reprodutibilidade |
 | 3 — Implementação | [docs/ITERACAO_2.md](./docs/ITERACAO_2.md) | Iteração 2 entregue: schema unificado (M3) + instalador custom NSIS com finish, multi-complementar, atalhos, desinstalador (M6) |
+| 3 — Implementação | [docs/ITERACAO_3.md](./docs/ITERACAO_3.md) | Iteração 3 entregue: wizard UI + preview ao vivo (M7) — React/Vite/shadcn com 5 passos e preview fiel ao NSIS |
