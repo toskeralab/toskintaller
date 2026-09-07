@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
 /**
  * Estilos simples de progresso aceitos no MVP (decisão S0.4):
@@ -20,12 +21,9 @@ const inputSchema = z.object({
   type: z.enum(["folder", "zip"]).default("folder"),
   path: z.string().min(1),
   entry: z.string().default("index.html"),
+  hash: z.string().optional(),
 });
 
-/**
- * Janela do shell Electron (RF3 — como o app é exibido no desktop).
- * Obrigatória no modo standalone; ignorada no modo installer (Iteração 2).
- */
 const windowSchema = z
   .object({
     width: z.number().int().min(320).default(1280),
@@ -33,7 +31,7 @@ const windowSchema = z
     minWidth: z.number().int().min(200).default(960),
     minHeight: z.number().int().min(150).default(600),
     autoHideMenuBar: z.boolean().default(true),
-    title: z.string().optional(), // default: app.name
+    title: z.string().optional(),
     backgroundColor: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/)
@@ -41,13 +39,8 @@ const windowSchema = z
   })
   .default({});
 
-/**
- * Config do shell Electron (template versionado no repo — pré-requisito de
- * reprodutibilidade, ver §5 Notas operacionais do PLANO_IMPLEMENTACAO.md).
- */
 const electronSchema = z
   .object({
-    /** Versão do Electron pinada — parte da chave de cache do target standalone. */
     version: z.string().default("33.2.0"),
   })
   .default({});
@@ -64,6 +57,7 @@ const progressSchema = z.object({
     .object({
       installing: z.string().default("Instalando arquivos..."),
       done: z.string().default("Concluído!"),
+      loading: z.string().optional(),
     })
     .default({}),
 });
@@ -123,6 +117,8 @@ export const manifestSchema = z.object({
   installer: installerSchema.default({}),
   artifact: artifactSchema,
 });
+
+export const manifestJsonSchema = zodToJsonSchema(manifestSchema);
 
 export type Manifest = z.infer<typeof manifestSchema>;
 export type ProgressStyle = z.infer<typeof progressStyleSchema>;

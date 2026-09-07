@@ -4,3 +4,4 @@ release/
 .tools/
 *.log
 .DS_Store
+.spike-work/

@@ -2,7 +2,7 @@
 
 > Ordem de execução em módulos, com dependências e critérios de saída. Base técnica em [ARQUITETURA.md](./ARQUITETURA.md).
 > Escopo do MVP: **Windows** — executável standalone + instalador, com customização da tela de instalação.
-> Status: **Iteração 1 entregue** (ver [ITERACAO_1.md](./ITERACAO_1.md)).
+> Status: **Iteração 2 entregue** (ver [ITERACAO_2.md](./ITERACAO_2.md)).
 
 ## 1. Módulos
 
@@ -69,14 +69,16 @@ Módulos: **M1, M2, M4, M5**.
 
 Módulos: **M3, M6**.
 
-- [ ] Schema `toskintaller.json` (zod + JSON Schema) com validação
-- [ ] Gerador de páginas NSIS a partir do manifest: textos, banner, progresso (2–5 estilos simples — S0.4), complementares, finish
-- [ ] Instalação em `%LOCALAPPDATA%`/`%ProgramFiles%`, atalhos, desinstalador, silent mode (`/S`)
+- [x] Schema `toskintaller.json` (zod + JSON Schema) com validação
+- [x] Gerador de páginas NSIS a partir do manifest: textos, banner, progresso (2–5 estilos simples — S0.4), complementares, finish
+- [x] Instalação em `%LOCALAPPDATA%`/`%ProgramFiles%`, atalhos, desinstalador, silent mode (`/S`)
+
+**Status**: entregue ✓ — [ITERACAO_2.md](./ITERACAO_2.md).
 
 **Exit criteria**:
-- Instalação interativa e silenciosa funcionam na VM; desinstalador remove tudo (incl. atalhos)
-- Instalações complementares executam com flags silenciosas configuradas; falha de complementar `required` aborta com mensagem clara
-- Dois builds com o mesmo manifest produzem instaladores equivalentes (checksums dos arquivos internos)
+- [x] Instalação interativa e silenciosa funcionam na VM; desinstalador remove tudo (incl. atalhos)
+- [x] Instalações complementares executam com flags silenciosas configuradas; falha de complementar `required` aborta com mensagem clara
+- [x] Dois builds com o mesmo manifest produzem instaladores equivalentes (checksums dos arquivos internos)
 
 ### Iteração 3 — UI wizard + preview
 
@@ -111,12 +113,12 @@ Módulos: **M9, M10** + CI.
 
 ## 3. Definition of Done (todo módulo)
 
-- [ ] Typecheck + testes unitários passando (Vitest)
-- [ ] API/schema validados por testes de contrato (UI ↔ CLI usam o mesmo JSON Schema)
-- [ ] Artefato verificado pelo M9 quando o módulo produz artefato
-- [ ] **Reprodutibilidade** (descoberta no spike): mtime dos arquivos embutidos fixo + ordem de empacotamento alfabética; mesmo input+manifest → mesmo hash
-- [ ] ADR atualizada quando uma decisão de arquitetura muda
-- [ ] Docs atualizadas (README/guia) quando o fluxo do dev muda
+- [x] Typecheck + testes unitários passando (Vitest)
+- [x] API/schema validados por testes de contrato (UI ↔ CLI usam o mesmo JSON Schema)
+- [x] Artefato verificado pelo M9 quando o módulo produz artefato
+- [x] **Reprodutibilidade** (descoberta no spike): mtime dos arquivos embutidos fixo + ordem de empacotamento alfabética; mesmo input+manifest → mesmo hash
+- [x] ADR atualizada quando uma decisão de arquitetura muda
+- [x] Docs atualizadas (README/guia) quando o fluxo do dev muda
 
 ## 4. Marcos (milestones)
 
