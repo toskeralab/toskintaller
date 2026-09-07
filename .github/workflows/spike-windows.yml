@@ -1,0 +1,85 @@
+name: Spike Iteração 0 — Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "apps/**"
+      - "fixtures/**"
+      - "tests/**"
+      - ".github/workflows/spike-windows.yml"
+
+jobs:
+  spike-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar NSIS (choco)
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Testes unitários
+        run: pnpm test
+
+      - name: Build dos 5 estilos (S0.4)
+        env:
+          NSIS_MAKENSIS: "C:\\Program Files (x86)\\NSIS\\makensis.exe"
+        run: pnpm build:spike
+
+      - name: Smoke — instalação silenciosa dos 5 estilos em Windows
+        shell: pwsh
+        env:
+          NSIS_MAKENSIS: "C:\\Program Files (x86)\\NSIS\\makensis.exe"
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($style in @("smooth", "marquee", "pulse", "bars", "dots")) {
+            $setup = Join-Path $PWD "release/spike/$style/ExampleApp-Setup-1.0.0.exe"
+            $installDir = Join-Path $env:LOCALAPPDATA "Example App"
+            Write-Host "== smoke: $style =="
+
+            # instala silencioso (/S)
+            & $setup /S
+            if ($LASTEXITCODE -ne 0) { throw "instalação falhou ($style): exit=$LASTEXITCODE" }
+
+            # verifica que o app foi copiado
+            $entry = Join-Path $installDir "index.html"
+            if (-not (Test-Path $entry)) { throw "index.html não instalado em $installDir ($style)" }
+            $content = Get-Content $entry -Raw
+            if ($content -notmatch "__TOSKINSTALLER__") { throw "stamp não presente no index.html instalado ($style)" }
+
+            # desinstala silencioso
+            $uninstaller = Join-Path $installDir "Uninstall.exe"
+            if (Test-Path $uninstaller) {
+              & $uninstaller /S
+              if ($LASTEXITCODE -ne 0) { throw "desinstalação falhou ($style): exit=$LASTEXITCODE" }
+              Start-Sleep -Seconds 1
+            }
+
+            Write-Host "OK: $style"
+          }
+
+      - name: Upload dos artefatos
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-installers
+          path: release/spike/**/*.exe
+          if-no-files-found: error

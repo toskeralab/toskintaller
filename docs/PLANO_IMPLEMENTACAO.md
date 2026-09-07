@@ -33,11 +33,16 @@ M10: evolui de M1 ao longo de todo o projeto
 
 ### Iteração 0 — Spike técnico (go/no-go)
 
+> **Status: executada ✓** — relatório completo em [SPIKE_ITERACAO_0.md](./SPIKE_ITERACAO_0.md).
+> Resumo: NSIS compila os **5 estilos** de progresso (S0.4); pipeline roda ponta a ponta
+> com app de exemplo; reprodutibilidade resolvida (mtime fixo + ordem alfabética de empacotamento).
+> CI `spike-windows.yml` cobre o smoke real em Windows (S0.1/S0.2 pendentes de validação com app real).
+
 Objetivo: eliminar os maiores riscos técnicos antes de codificar o produto.
 
-- [ ] S0.1 — Electron shell serve um build Freebuff real via `app://`; app conecta no Convex (validar CORS/origin; fallback localhost HTTP documentado)
-- [ ] S0.2 — electron-builder gera `portable` (standalone) e roda em VM Windows 10/11 limpa
-- [ ] S0.3 — NSIS custom pages com banner + textos + progresso smooth + execução de instalação complementar silenciosa
+- [ ] S0.1 — Electron shell serve um build Freebuff real via `app://`; app conecta no Convex (validar CORS/origin; fallback localhost HTTP documentado) — **adicionado à Iteração 1 (M4)**
+- [ ] S0.2 — electron-builder gera `portable` (standalone) e roda em VM Windows 10/11 limpa — **smoke coberto pelo CI**
+- [x] S0.3 — NSIS custom pages com banner + textos + **5 estilos de progresso** + instalação complementar silenciosa — **compila ✓ (makensis 3.08, PE válido)**
 - [x] S0.4 — **Decisão registrada (fechada)**: RF4 "progresso animado" = animações simples no MVP (2 a 5 estilos, a descrever no manifest). Go/no-go fecha **para NSIS no MVP**; installer-html permanece como evolução pós-MVP. Ver [ARQUITETURA.md → Decisão S0.4](./ARQUITETURA.md).
 
 **Saída**: relatório de spike + ADRs atualizadas + decisão de renderer do instalador registrada (S0.4).
@@ -106,6 +111,7 @@ Módulos: **M9, M10** + CI.
 - [ ] Typecheck + testes unitários passando (Vitest)
 - [ ] API/schema validados por testes de contrato (UI ↔ CLI usam o mesmo JSON Schema)
 - [ ] Artefato verificado pelo M9 quando o módulo produz artefato
+- [ ] **Reprodutibilidade** (descoberta no spike): mtime dos arquivos embutidos fixo + ordem de empacotamento alfabética; mesmo input+manifest → mesmo hash
 - [ ] ADR atualizada quando uma decisão de arquitetura muda
 - [ ] Docs atualizadas (README/guia) quando o fluxo do dev muda
 

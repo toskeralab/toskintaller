@@ -1,0 +1,17 @@
+{
+  "name": "toskintaller-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "toskintaller": "./src/index.ts"
+  },
+  "dependencies": {
+    "@toskintaller/config": "workspace:*",
+    "@toskintaller/core": "workspace:*",
+    "@toskintaller/input": "workspace:*",
+    "@toskintaller/installer-nsis": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}
