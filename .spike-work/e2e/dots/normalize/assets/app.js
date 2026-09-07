@@ -1,0 +1,1 @@
+console.log("Example App (spike Toskinstaller) carregado.");

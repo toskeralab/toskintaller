@@ -1,0 +1,15 @@
+{
+  "appName": "Example App",
+  "version": "1.0.0",
+  "mode": "installer",
+  "entry": "index.html",
+  "inputFingerprint": "82350b9c4cf9792cf26f1748a81d16afe02830b13eea56e5a7a08dd971cabc4b",
+  "window": {
+    "width": 1280,
+    "height": 800,
+    "minWidth": 960,
+    "minHeight": 600,
+    "autoHideMenuBar": true,
+    "backgroundColor": "#0f172a"
+  }
+}
