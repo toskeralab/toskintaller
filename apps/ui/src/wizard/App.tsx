@@ -45,8 +45,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900">
-      {/* Header */}
-      <header className="border-b border-border bg-slate-950 px-6 py-4">
+      {/* Header */}        <div className="border-b border-border bg-slate-950 px-6 py-4">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
@@ -59,8 +58,7 @@ export default function App() {
           </div>
           <div className="text-xs text-muted-foreground">
             v0.1.0 · {manifest.mode}
-          </div>
-        </header>
+          </div>          </div>
 
         {/* Progress steps */}
         <div className="max-w-2xl mx-auto px-6 mt-6">

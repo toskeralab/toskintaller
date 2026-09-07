@@ -8,6 +8,48 @@ import { runPipeline } from "@toskintaller/core";
 import type { Manifest } from "@toskintaller/config";
 
 const PORT = 3000;
+const UI_DIST = path.resolve(process.cwd(), "apps", "ui", "dist");
+
+function contentForPath(p: string): string | null {
+  const ext = path.extname(p).toLowerCase();
+  return (
+    {
+      ".html": "text/html; charset=utf-8",
+      ".js": "application/javascript; charset=utf-8",
+      ".css": "text/css; charset=utf-8",
+      ".png": "image/png",
+      ".svg": "image/svg+xml",
+      ".ico": "image/x-icon",
+      ".woff": "font/woff",
+      ".woff2": "font/woff2",
+      ".ttf": "font/ttf",
+      ".eot": "application/vnd.ms-fontobject",
+    }[ext] ?? null
+  );
+}
+
+async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const url = req.url ?? "/";
+  const decoded = decodeURIComponent(url);
+  const statPath = path.resolve(UI_DIST, decoded);
+
+  // Proteção contra path traversal
+  if (!statPath.startsWith(UI_DIST)) return false;
+
+  try {
+    const stat = await fs.stat(statPath);
+    if (!stat.isFile()) return false;
+    const body = await fs.readFile(statPath);
+    const ct = contentForPath(statPath);
+    res.statusCode = 200;
+    res.setHeader("Content-Type", ct ?? "application/octet-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.end(body);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const HOST = "127.0.0.1";
 
 function json(res: ServerResponse, data: unknown, status = 200) {
@@ -167,18 +209,66 @@ async function handleArtifact(req: IncomingMessage, res: ServerResponse): Promis
   }
 }
 
+async function findIndexHtml(urlPath: string): Promise<string | null> {
+  const decoded = decodeURIComponent(urlPath);
+  const decodedPath = path.resolve(UI_DIST, decoded);
+  if (!decodedPath.startsWith(UI_DIST)) return null;
+  try {
+    const stat = await fs.stat(decodedPath);
+    if (stat.isFile()) return decodedPath;
+    if (stat.isDirectory()) {
+      const indexPath = path.join(decodedPath, "index.html");
+      const iStat = await fs.stat(indexPath);
+      if (iStat.isFile()) return indexPath;
+    }
+  } catch {}
+  return null;
+}
+
 const server = createServer(async (req, res) => {
   const url = req.url ?? "/";
+
+  // 1) Rotas da API com prioridade
   if (url.startsWith("/api/scan")) return handleScan(req, res);
-  if (url.startsWith("/api/manifest") && req.method === "GET") return handleManifestGet(req, res);
-  if (url.startsWith("/api/manifest") && req.method === "POST") return handleManifestSave(req, res);
+  if (url.startsWith("/api/manifest")) {
+    if (req.method === "GET") return handleManifestGet(req, res);
+    if (req.method === "POST") return handleManifestSave(req, res);
+  }
   if (url.startsWith("/api/preview")) return handlePreview(req, res);
   if (url.startsWith("/api/build")) return handleBuild(req, res);
   if (url.startsWith("/api/artifact")) return handleArtifact(req, res);
+
+  // 2) Static assets do wizard (e.x.: /assets/index-xxx.js, /assets/index-xxx.css)
+  if (url.startsWith("/assets/")) {
+    const served = await serveStatic(req, res);
+    if (served) return;
+  }
+
+  // 3) SPA fallback: qualquer outra rota retorna index.html (navegação interna do wizard)
+  const indexPath = path.resolve(UI_DIST, "index.html");
+  try {
+    const iStat = await fs.stat(indexPath);
+    if (iStat.isFile()) {
+      const body = await fs.readFile(indexPath);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/html");
+      res.end(body);
+      return;
+    }
+  } catch {}
+
   res.statusCode = 404;
   res.end("not found");
 });
 
+let uiBuilt = false;
+try {
+  await fs.stat(path.resolve(UI_DIST, "index.html"));
+  uiBuilt = true;
+} catch {}
+
 server.listen(PORT, HOST, () => {
-  console.log("Toskinstaller UI server: http://127.0.0.1:3000");
+  console.log(`Toskinstaller UI: http://127.0.0.1:${PORT}`);
+  console.log(`  API: /api/* (scan, manifest, preview, build, artifact)`);
+  console.log(`  Wizard: ${uiBuilt ? "servindo apps/ui/dist ✓" : "falta apps/ui/dist — rode 'pnpm --filter toskintaller-ui build'"}`);
 });

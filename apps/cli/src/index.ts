@@ -145,7 +145,7 @@ program
     }
   });
 
-// UI command — serve wizard + API local (127.0.0.1:3000)
+// UI command — serve wizard (apps/ui/dist) + API local (127.0.0.1:3000)
 program
   .command("ui")
   .description("Abre o wizard interativo (React) com API local em 127.0.0.1:3000")
@@ -155,6 +155,27 @@ program
       const server = await import("./server/index.ts");
     } catch (err) {
       console.error("✖ nao foi possivel iniciar o servidor UI: " + (err && Object.prototype.hasOwnProperty.call(err,"message") ? (err as any).message : String(err)));
+      process.exitCode = 1;
+    }
+  });
+
+// CLI `ui` também oferece comando `ui:build` para gerar o bundle estático quando desejado
+program
+  .command("ui:build")
+  .description("Compila o wizard React para apps/ui/dist (build estática do Vite)")
+  .action(async () => {
+    try {
+      const { execSync } = await import("node:child_process");
+      const dist = path.resolve(process.cwd(), "apps", "ui", "dist");
+      console.log("Compilando wizard estático em apps/ui/dist ...");
+      execSync("pnpm --filter toskintaller-ui build", {
+        cwd: process.cwd(),
+        stdio: "inherit",
+        env: { ...process.env, CI: "true" },
+      });
+      console.log(`✔ wizard estático pronto em ${dist}`);
+    } catch (err) {
+      console.error("✖ build da UI falhou: " + (err && Object.prototype.hasOwnProperty.call(err,"message") ? (err as any).message : String(err)));
       process.exitCode = 1;
     }
   });

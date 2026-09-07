@@ -5,3 +5,4 @@ release/
 *.log
 .DS_Store
 .spike-work/
+apps/ui/dist/

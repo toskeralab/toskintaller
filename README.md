@@ -1,6 +1,26 @@
 # toskintaller
 Toskinstaller é um app para criação de executáveis e instaladores de apps desenvolvidos na plataforma Freebuff para ambientes Desktop e Android. Junto com a compilação do EXE, Toskinstaller oferece customização da janela de instalação onde informações e recursos podem ser adicionados.
 
+## Como rodar
+
+```bash
+# Instalar dependências
+pnpm install
+
+# Compilar o wizard estático (apps/ui/dist) — feito automaticamente ao rodar 'toskintaller ui'
+pnpm --filter toskintaller-ui build
+
+# Iniciar o wizard + API local em http://127.0.0.1:3000
+pnpm exec tsx apps/cli/src/index.ts ui
+# ou, se o pnpm install já estiver pronto:
+pnpm ui
+
+# Modo desenvolvimento do wizard (Vite) em http://127.0.0.1:5173 com proxy /api → 3000
+pnpm --filter toskintaller-ui dev
+```
+
+O comando `toskintaller ui` serve o wizard estático (apps/ui/dist) + API local na mesma origem (127.0.0.1:3000), sem depender de CORS entre portas.
+
 ## Documentação
 
 | Fase | Documento | Conteúdo |

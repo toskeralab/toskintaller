@@ -9,6 +9,8 @@
     "test": "vitest run",
     "build:spike": "tsx apps/cli/src/index.ts build --config fixtures/example-app/toskintaller.json --all-styles --out release/spike",
     "build:standalone": "tsx apps/cli/src/index.ts build --config fixtures/example-app/toskintaller.standalone.json --target windows-standalone --out release/standalone",
+    "ui:build": "tsx apps/cli/src/index.ts ui:build",
+    "ui": "tsx apps/cli/src/index.ts ui",
     "spike": "pnpm typecheck && pnpm test && pnpm build:spike && pnpm build:standalone"
   },
   "devDependencies": {

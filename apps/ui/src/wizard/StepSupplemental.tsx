@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../api/client";
 import { Input, Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Checkbox } from "../components/ui";
-import { InstallPreview } from "../preview/InstallPreview";
+import InstallPreview from "../preview/InstallPreview";
 import type { Manifest, Supplemental } from "@toskintaller/config";
 
 interface Props {

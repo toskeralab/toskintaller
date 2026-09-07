@@ -3,7 +3,7 @@ import { api } from "../api/client";
 import {
   Input, Textarea, Select, Button, Card, CardHeader, CardTitle, CardDescription, CardContent,
 } from "../components/ui";
-import { InstallPreview } from "../preview/InstallPreview";
+import InstallPreview from "../preview/InstallPreview";
 import type { Manifest } from "@toskintaller/config";
 import { PROGRESS_STYLES } from "@toskintaller/config";
 

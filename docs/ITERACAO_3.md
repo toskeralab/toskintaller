@@ -47,3 +47,11 @@ O preview renderiza:
 
 - CI Windows coverage para o wizard (Playwright)
 - Iteração 4: verify, CI e hardening (M9, M10)
+
+## 5. Nota de integração (correção de iteração)
+
+O fluxo original do `toskintaller ui` servia apenas as rotas `/api/*`; a UI React precisava ser servida pela porta do Vite (5173) e fazer requisições cross-origin para a API. Essa iteração corrige a integração para:
+
+- O servidor local da CLI (`apps/cli/src/server/index.ts`) agora serve o build estático do wizard (`apps/ui/dist`) em `127.0.0.1:3000`, com `/api/*` tendo prioridade e SPA fallback para `index.html`.
+- O Vite de dev (`apps/ui/vite.config.ts`) usa porta `5173` e proxy `/api` → `http://127.0.0.1:3000` para desenvolvimento.
+- O comando `pnpm ui` (ou `toskintaller ui`) abre o wizard completo em `http://127.0.0.1:3000` com scan de pasta, preview ao vivo e geração do .exe funcionando pela mesma origem.
