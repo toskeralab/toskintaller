@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "zod": "^3.24.0"
+  },
+  "scripts": {
+    "inspect": "node -e \"const c = require('./src/index.ts'); console.log(Object.keys(c))\""
   }
 }

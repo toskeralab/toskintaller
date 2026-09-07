@@ -1,0 +1,105 @@
+name: build-windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  windows:
+    name: Windows build + verify (Iteração 1)
+    runs-on: windows-latest
+    env:
+      SOURCE_DATE_EPOCH: "1704067200"
+      NSIS_SOURCE_DATE_EPOCH: "1704067200"
+      CI: "true"
+      TOSKINTALLER_VERBOSE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install pnpm
+        run: npm i -g pnpm@10.33.3
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit + integration tests
+        run: pnpm test
+
+      - name: Install NSIS (Windows)
+        run: |
+          choco install nsis -y
+          Write-Host "makensis=$env:PATH" -ForegroundColor Green
+          where.exe makensis
+
+      - name: Build installer (5 estilos — RF3 modo 2 / S0.4)
+        run: pnpm build:spike
+
+      - name: Build standalone (RF3 modo 1)
+        run: pnpm build:standalone
+
+      - name: Verify installer artifacts
+        run: |
+          $styles = "smooth","marquee","pulse","bars","dots"
+          foreach ($s in $styles) {
+            $exe = "release/spike/$s/ExampleApp-Setup-1.0.0.exe"
+            $int = "release/spike/$s/integrity.json"
+            tsx apps/cli/src/index.ts verify --artifact $exe --integrity $int
+          }
+
+      - name: Verify standalone artifact
+        run: |
+          tsx apps/cli/src/index.ts verify `
+            --artifact release/standalone/standalone/ExampleApp-1.0.0.exe `
+            --integrity release/standalone/standalone/integrity.json
+
+      - name: Reprodutibilidade (dois builds independentes → mesmo hash)
+        run: |
+          # Build A
+          pnpm build:spike -- --out release/rep-a
+          # Build B (diretorio limpo)
+          pnpm build:spike -- --out release/rep-b
+          $a = (Get-FileHash release/rep-a/smooth/ExampleApp-Setup-1.0.0.exe -Algorithm SHA256).Hash
+          $b = (Get-FileHash release/rep-b/smooth/ExampleApp-Setup-1.0.0.exe -Algorithm SHA256).Hash
+          if ($a -ne $b) { throw "REPRODUCIBILITY FAIL: $a vs $b" }
+          Write-Host "✔ reprodutibilidade OK: $a"
+
+      - name: List produced artifacts
+        run: |
+          Write-Host "=== installer styles ==="
+          foreach ($s in "smooth","marquee","pulse","bars","dots") {
+            $f = "release/spike/$s/ExampleApp-Setup-1.0.0.exe"
+            if (Test-Path $f) { Write-Host "$s : $(Split-Path $f -Leaf) ($((Get-Item $f).Length) bytes)" }
+          }
+          Write-Host "=== standalone ==="
+          $f = "release/standalone/standalone/ExampleApp-1.0.0.exe"
+          if (Test-Path $f) { Write-Host "standalone : $(Split-Path $f -Leaf) ($((Get-Item $f).Length) bytes)" }
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: release/spike/**/*.exe
+          if-no-files-found: error
+
+      - name: Upload standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-windows
+          path: release/standalone/**/*.exe
+          if-no-files-found: error

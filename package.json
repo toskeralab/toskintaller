@@ -2,24 +2,32 @@
   "name": "toskintaller",
   "version": "0.1.0",
   "private": true,
-  "description": "Toskinstaller — toolchain de empacotamento de apps Freebuff (spike técnico, Iteração 0)",
+  "description": "Toskinstaller — toolchain de empacotamento de apps Freebuff (Iteração 1: standalone + installer)",
   "packageManager": "pnpm@10.33.3",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:spike": "tsx apps/cli/src/index.ts build --config fixtures/example-app/toskintaller.json --all-styles --out release/spike",
-    "spike": "pnpm typecheck && pnpm test && pnpm build:spike"
+    "build:standalone": "tsx apps/cli/src/index.ts build --config fixtures/example-app/toskintaller.standalone.json --target windows-standalone --out release/standalone",
+    "spike": "pnpm typecheck && pnpm test && pnpm build:spike && pnpm build:standalone"
   },
   "devDependencies": {
     "@toskintaller/config": "workspace:*",
     "@toskintaller/core": "workspace:*",
     "@toskintaller/installer-nsis": "workspace:*",
+    "@toskintaller/standalone": "workspace:*",
+    "@toskintaller/verify": "workspace:*",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.10.0",
+    "electron": "33.2.0",
+    "electron-builder": "24.13.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

@@ -3,12 +3,12 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { BuildContext, TargetAdapter, Artifact } from "@toskintaller/core";
 import type { InputInfo } from "@toskintaller/input";
-import { generateGradientBmp } from "./banner";
-import { generateNsisScript } from "./template";
+import { generateGradientBmp } from "./banner.ts";
+import { generateNsisScript } from "./template.ts";
 
-export { styleFragments } from "./styles";
-export { generateNsisScript } from "./template";
-export { generateGradientBmp } from "./banner";
+export { styleFragments } from "./styles.ts";
+export { generateNsisScript } from "./template.ts";
+export { generateGradientBmp } from "./banner.ts";
 
 export interface Makensis {
   bin: string;
@@ -76,6 +76,7 @@ const FIXED_MTIME = new Date("2024-01-01T00:00:00Z");
 
 export const installerNsisTarget: TargetAdapter = {
   id: "windows-installer",
+  mode: "installer",
   hostRequirements: { os: ["win32", "linux", "darwin"], arch: ["x64"] },
 
   /** Render: gera banner.bmp + installer.nsi a partir do manifest. */

@@ -12,7 +12,12 @@ export interface Artifact {
   fileName: string;
   /** Versão do makensis usado (informação do relatório). */
   makensisVersion?: string;
+  /** Versão do electron-builder usado (informação do relatório). */
+  electronBuilderVersion?: string;
 }
+
+/** Modos de artefato (RF3): executável standalone ou instalador. */
+export type TargetMode = "standalone" | "installer";
 
 /** Contexto compartilhado entre os stages. */
 export interface BuildContext {
@@ -31,13 +36,18 @@ export interface BuildContext {
   nsisDir?: string;
   /** Substituir o estilo de progresso do manifest (usado no spike para gerar os 5 estilos). */
   styleOverride?: string;
-  /** Callback opcional de log (CLI/CI exibem a saída do makensis). */
+  /** Callback opcional de log (CLI/CI exibem a saída dos bundlers). */
   log?: (msg: string) => void;
 }
 
-/** Contrato de um target adapter (ADR-1/§7 do ARQUITETURA.md). */
+/**
+ * Contrato de um target adapter (ADR-1/§7 do ARQUITETURA.md).
+ * O core não conhece plataformas: cada alvo registra um adapter (RF2/M10).
+ */
 export interface TargetAdapter {
   id: string;
+  /** Modo de artefato atendido pelo target (RF3). */
+  mode: TargetMode;
   hostRequirements: { os: string[]; arch: string[] };
   render(ctx: BuildContext, input: InputInfo): Promise<void>;
   bundle(ctx: BuildContext): Promise<Artifact>;
@@ -52,6 +62,43 @@ export interface BuildReport {
   inputFingerprint: string;
 }
 
+// ── Registry de targets (RF2 / M10) ──────────────────────────────────
+
+const registry = new Map<string, TargetAdapter>();
+
+/** Registra um target adapter (chamado pelo CLI/testes que importam os packages). */
+export function registerTarget(target: TargetAdapter): void {
+  registry.set(target.id, target);
+}
+
+/** Busca um target pelo id (ex.: `--target=windows-standalone`). */
+export function getTarget(id: string): TargetAdapter {
+  const target = registry.get(id);
+  if (!target) {
+    throw new Error(
+      `[registry] target '${id}' não registrado. Registrados: ${[...registry.keys()].join(", ") || "(nenhum)"}`,
+    );
+  }
+  return target;
+}
+
+/** Targets registrados (para diagnóstico do CLI). */
+export function registeredTargets(): TargetAdapter[] {
+  return [...registry.values()];
+}
+
+/** RF2: escolhe o target a partir do modo do manifest (Windows por padrão). */
+export function resolveTarget(manifest: Pick<Manifest, "mode">): TargetAdapter {
+  const matches = registeredTargets().filter((t) => t.mode === manifest.mode);
+  if (matches.length === 0) {
+    throw new Error(
+      `[registry] nenhum target registrado para o modo '${manifest.mode}' (RF2). ` +
+        `Registrados: ${[...registry.keys()].join(", ") || "(nenhum)"}`,
+    );
+  }
+  return matches[0];
+}
+
 /**
  * Esqueleto do pipeline: input → normalize → stage → stamp → render → bundle → verify → output.
  * Cada stage é uma função pura sobre `ctx`; o pipeline orquestra a ordem e os diretórios.
@@ -59,24 +106,26 @@ export interface BuildReport {
 export async function runPipeline(ctx: BuildContext): Promise<BuildReport> {
   const { manifest } = ctx;
 
-  // 1. input — detecta e valida a entrada
-  const input = await runInput(manifest, ctx.baseDir);
+  // 1. input — detecta e valida a entrada (pasta ou zip; zip extrai em workDir/input)
+  const input = await runInput(manifest, ctx.baseDir, {
+    extractDir: path.join(ctx.workDir, "input"),
+  });
 
   // 2. normalize — reescreve assets absolutos p/ relativos
   const normalizeDir = path.join(ctx.workDir, "normalize");
   await runNormalize(input, manifest, normalizeDir);
 
-  // 3. stage — cópia determinística (no spike, reusa normalize; M2 aprofunda no incremental)
+  // 3. stage — cópia determinística (incremental entra no tuning da Iteração 4)
   const stageDir = path.join(ctx.workDir, "stage");
   await copyTree(normalizeDir, stageDir);
 
   // 4. stamp — injeta metadados no entry point
   await runStamp(stageDir, manifest, input.fingerprint);
 
-  // 5. render — o target gera o que lhe cabe (páginas NSIS, recursos)
+  // 5. render — o target gera o que lhe cabe (páginas NSIS, recursos, config do bundler)
   await ctx.target.render(ctx, input);
 
-  // 6. bundle — compilador produz o artefato
+  // 6. bundle — compilador/bundler produz o artefato
   const artifact = await ctx.target.bundle(ctx);
 
   // 7. verify — checksums + manifest de integridade
@@ -93,7 +142,7 @@ export async function runPipeline(ctx: BuildContext): Promise<BuildReport> {
 
   return {
     target: ctx.target.id,
-    style: ctx.styleOverride ?? manifest.installScreen.progress.style,
+    style: ctx.styleOverride ?? "—",
     artifact: { ...artifact, path: finalArtifactPath },
     integrity,
     inputFingerprint: input.fingerprint,
@@ -102,12 +151,12 @@ export async function runPipeline(ctx: BuildContext): Promise<BuildReport> {
 
 /**
  * Cópia recursiva simples e determinística (ordem estável + mtime fixo).
- * O makensis embute o mtime dos arquivos no instalador; sem mtime fixo,
- * dois builds da mesma entrada produzem .exe com hashes diferentes.
+ * makensis e o empacotamento do electron-builder embutem mtimes dos arquivos
+ * no artefato; sem mtime fixo, dois builds da mesma entrada geram hashes diferentes.
  */
 const FIXED_MTIME = new Date("2024-01-01T00:00:00Z");
 
-async function copyTree(src: string, dest: string): Promise<void> {
+export async function copyTree(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = (await fs.readdir(src, { withFileTypes: true })).sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -123,6 +172,3 @@ async function copyTree(src: string, dest: string): Promise<void> {
     }
   }
 }
-
-/** Registry de targets (M1/M10). No spike: apenas windows-installer. */
-export const targets: Record<string, TargetAdapter> = {};

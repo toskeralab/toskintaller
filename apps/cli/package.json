@@ -12,6 +12,8 @@
     "@toskintaller/core": "workspace:*",
     "@toskintaller/input": "workspace:*",
     "@toskintaller/installer-nsis": "workspace:*",
+    "@toskintaller/standalone": "workspace:*",
+    "@toskintaller/verify": "workspace:*",
     "commander": "^12.1.0"
   }
 }

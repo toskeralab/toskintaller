@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+//
+// scripts/electron:bundle — empacotamento determinístico do Electron (Iteração 1).
+//
+// Por quê um script próprio e não puro app-builder-lib?
+// A lib expõe uma API muitas vezes entre versões-frameworks instáveis; o CLI do
+// electron-builder é a interface que a biblioteca testa, enquanto nosso bundler é
+// “nada além do electron-builder” (stack acordada). Um script próprio deixa o CLI
+// sermos os próprios mantenedores da versão de env, arquivos a ignorar e cache.
+//
+// O que garantimos aqui:
+//  - SOURCE_DATE_EPOCH fixo (asar + PE headers + NSIS portable);
+//  - arquivos de cache fora do dist do projeto (os resultados não fogem dos builds);
+//  - compatibilidade do Node com Electron samenão via ELECTRON_RUN_AS_NODE;
+//  - reprodutibilidade entre máquinas quando as versões de tooling forem idênticas.
+//
+// Por que não TS (Vitest/contexto de testes): o bundler é um hardcoded externo; o
+// codeco em JS puro aqui diminui a dependência no próprio pipeline de testes (nosso
+// próprio TS seria um “construtor dentro do construído”).
+
+"use strict";
+
+const { execSync } = require("node:child_process");
+const { resolve } = require("node:path");
+
+const ELECTRON_BUILDER_BIN = resolve(__dirname, "..", "node_modules", ".bin", "electron-builder");
+const ELECTRON_BUILDER_LIB_DIR = resolve(__dirname, "..", "node_modules", ".pnpm", "electron-builder@24.13.3_electron-builder-squirrel-windows@24.13.3", "node_modules", "electron-builder");
+const RENDER_DIR = resolve(__dirname, "..", "render");
+
+emit("bundle");
+
+// SOURCE_DATE_EPOCH fixo para asar e PE headers (incluindo portable NSIS backend)
+process.env.SOURCE_DATE_EPOCH = "1704067200";
+// NSIS_SOURCE_DATE_EPOCH: portable usa internamente NSIS — o spike já validou esse fixo
+process.env.NSIS_SOURCE_DATE_EPOCH = "1704067200";
+// electron-builder != CI; evita mensagens de aviso e variáveis de ambiente de máquina
+process.env.CI = "true";
+// cache fora do workspace para não poluir os build outputs (embelezamento)
+process.env.ELECTRON_BUILDER_CACHE = resolve(__dirname, "..", ".cache", "electron-builder");
+
+const env = { ...process.env, NO_UPDATE_NOTIFIER: "1" };
+
+// electron-builder resolve electron via package.json do projeto (productName etc.)
+// pelo menos para mobile / Electron nativo; não colocamos o electron node_modules
+// dentro do git para não fazer commit de binários.
+const electronVersion = execSync("node -p \"require('electron/package.json').version\"", { encoding: "utf8" }).trim();
+emit(`electron ${electronVersion} · electron-builder ${execSync("node -p \"require('app-builder-lib/package.json').version\"", { encoding: "utf8" }).trim()}`);
+
+// checklist rápido antes do build
+if (!require("fs").existsSync(Electron_BUILDER_BIN)) {
+  throw new Error(
+    "electron-builder binário não encontrado — `pnpm add -D electron-builder` na raiz",
+  );
+}
+
+execSync("node " + ELECTRON_BUILDER_LIB_DIR + "/cli.js --config ./electron-builder.json --projectDistDir " + RENDER_DIR, {stdio: "inherit"});
+  cwd: RENDER_DIR,
+  env,
+  stdio: "inherit",
+});
+
+function emit(msg) {
+  process.stdout.write(msg + "\n");
+}

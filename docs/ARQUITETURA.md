@@ -37,14 +37,14 @@ O app Freebuff é uma web app; para rodar como desktop é preciso um shell que s
 | Curva de manutenção | Baixa (time web) | Média (template Rust) | Média (C#) |
 | WebView2 necessário | Não (Chromium embutido) | Sim (presente no Win 10/11 via Edge) | Sim |
 
-**Decisão: Electron** — fit com o time, tooling maduro (`portable` + `nsis` prontos), sem dependência de runtime externo. O shell é deliberadamente fino (~main process + preload + protocol handler), sem Node backend: os arquivos estáticos são servidos por **protocolo custom `app://`** (sem servidor HTTP local, sem conflito de porta, inicialização rápida). **Alternativa documentada**: se o tamanho do artefato virar problema real, migrar o template de shell para Tauri mantendo o restante da toolchain intacto (o shell é um template substituível).
+**Decisão: Electron** — fit com o time, tooling maduro (`portable` + `nsis` prontos), sem dependência de runtime externo. O shell é deliberadamente fino (~main process + preload + protocol handler), sem Node backend: os arquivos estáticos são servidos por **protocolo custom `app://`** (sem servidor HTTP local, sem conflito de porta, inicialização rápida). **Implementação**: shell versionado em `templates/electron-shell/` (Iteração 1, M4); o `fetch` via `app://` envia `Origin: app://toskinstaller` e o Convex responde `Access-Control-Allow-Origin: *` por padrão, então a conexão funciona sem configuração. **Alternativa documentada**: se o tamanho do artefato virar problema real, migrar o template de shell para Tauri mantendo o restante da toolchain intacto (o shell é um template substituível).
 
 ### ADR-3: Instalador MVP = NSIS via electron-builder, com páginas custom geradas a partir do manifest
 
 RF4 exige tela customizável. NSIS (via electron-builder) entrega no MVP: textos, banner (imagem), barra de progresso (estilos simples) e instalações complementares (checkboxes + execução silenciosa), usando `nsis.include` + páginas custom (`customInstallHeader.nsh` / `customInstallPages.nsh`) **geradas** a partir da configuração do usuário.
 
 - **Limite conhecido**: NSIS não renderiza animações ricas (CSS/HTML) — progresso animado fica limitado a estilos simples.
-- **Decisão S0.4 (registrada)**: RF4 "progresso animado" é atendido no MVP com **animações simples** — de 2 a 5 estilos selecionáveis no manifest (`installScreen.progress.style`). O go/no-go do spike (Iteração 0) **fecha para NSIS no MVP**; o **installer-html** (ADR-4) permanece como evolução pós-MVP para animações ricas.
+- **Decisão S0.4 (registrada e fechada ✓)**: RF4 "progresso animado" é atendido no MVP com **animações simples** — de 2 a 5 estilos selecionáveis no manifest (`installScreen.progress.style`). O go/no-go do spike (Iteração 0) **fecha para NSIS no MVP**; o **installer-html** (ADR-4) permanece como evolução pós-MVP para animações ricas. **Comprovado no spike e na Iteração 1**: os 5 estilos compilam com makensis 3.08 e entregam `.exe` válido.
 - O modelo de config (M3) é compartilhado: NSIS e installer-html são **dois renderers do mesmo schema** — não há reescrita, há troca de renderer.
 
 ### ADR-4 (evolução pós-MVP): installer-html — tela de instalação em HTML/CSS/JS

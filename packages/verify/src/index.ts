@@ -1,6 +1,6 @@
 import { promises as fs, createReadStream } from "node:fs";
-import path from "node:path";
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 export function sha256File(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -30,4 +30,45 @@ export async function writeIntegrityManifest(
     JSON.stringify({ algorithm: "sha256", files: integrity }, null, 2),
   );
   return integrity;
+}
+
+/**
+ * Dumps a sorted manifest of the given directory's files (relative paths → sha256).
+ * Used by CIR to surface reproducibility and by the standalone target to surface what
+ * was packed.
+ */
+export async function writeFileManifest(
+  dir: string,
+  outPath: string,
+): Promise<Record<string, string>> {
+  const files = await listFiles(dir);
+  const manifest: Record<string, string> = {};
+  for (const rel of files) {
+    manifest[rel] = await sha256File(path.join(dir, rel));
+  }
+  await fs.mkdir(path.dirname(outPath), { recursive: true });
+  await fs.writeFile(
+    outPath,
+    JSON.stringify({ algorithm: "sha256", files: manifest }, null, 2),
+    "utf8",
+  );
+  return manifest;
+}
+
+/** Lista arquivos relativos de um diretório. */
+async function listFiles(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(current: string, rel: string): Promise<void> {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        await walk(path.join(current, e.name), rel ? `${rel}/${e.name}` : e.name);
+      } else {
+        out.push(rel ? `${rel}/${e.name}` : e.name);
+      }
+    }
+  }
+  await walk(dir, "");
+  return out;
 }

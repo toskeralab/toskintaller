@@ -1,5 +1,5 @@
 {
-  "name": "@toskintaller/input",
+  "name": "@toskintaller/standalone",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,11 @@
   },
   "dependencies": {
     "@toskintaller/config": "workspace:*",
-    "adm-zip": "^0.5.16"
+    "@toskintaller/core": "workspace:*",
+    "@toskintaller/input": "workspace:*"
   },
+  "devDependencies": {},
   "scripts": {
-    "inspect": "node -e \"const i = require('./src/index.ts'); console.log(Object.keys(i))\""
+    "build": "tsx ../../../scripts/electron:bundle"
   }
 }
-

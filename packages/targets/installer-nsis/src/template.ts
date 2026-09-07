@@ -1,5 +1,5 @@
 import type { Manifest } from "@toskintaller/config";
-import { styleFragments } from "./styles";
+import { styleFragments } from "./styles.ts";
 
 export interface NsisRenderInput {
   manifest: Manifest;

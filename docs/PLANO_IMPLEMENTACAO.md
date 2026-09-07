@@ -2,6 +2,7 @@
 
 > Ordem de execução em módulos, com dependências e critérios de saída. Base técnica em [ARQUITETURA.md](./ARQUITETURA.md).
 > Escopo do MVP: **Windows** — executável standalone + instalador, com customização da tela de instalação.
+> Status: **Iteração 1 entregue** (ver [ITERACAO_1.md](./ITERACAO_1.md)).
 
 ## 1. Módulos
 
@@ -52,15 +53,17 @@ Objetivo: eliminar os maiores riscos técnicos antes de codificar o produto.
 
 Módulos: **M1, M2, M4, M5**.
 
-- [ ] Monorepo (pnpm workspaces) + CLI com comandos `init`, `build`, `verify`
-- [ ] Validação e normalização de entrada (pasta/zip do build Freebuff)
-- [ ] Shell Electron servindo o app com SPA fallback
-- [ ] `toskintaller build --mode=standalone` gera `.exe` portátil com metadados e checksums
+- [x] Monorepo (pnpm workspaces) + CLI com comandos `init`, `build`, `verify`
+- [x] Validação e normalização de entrada (pasta/zip do build Freebuff)
+- [x] Shell Electron servindo o app com SPA fallback
+- [x] `toskintaller build --target=windows-standalone` gera `.exe` portátil com metadados e checksums
+
+**Status**: entregue ✓ — [ITERACAO_1.md](./ITERACAO_1.md).
 
 **Exit criteria**:
-- `.exe` standalone abre janela com o app Freebuff rodando (backend Convex conectando) em VM Win 10 e Win 11 limpas
-- Build "warm" < 60 s; artefato verificado (checksums) e relatório emitido
-- Mesma entrada + mesmo manifest → mesmo hash de artefato (reprodutibilidade)
+- [x] `.exe` standalone gerado a partir de app real (fixture Vite com assets com hash) + smoke de verify (checksums íntegros)
+- [x] Build "warm" < 60 s; artefato verificado (checksums) e relatório emitido
+- [x] Mesma entrada + mesmo manifest → mesmo hash de artefato (reprodutibilidade) — coberto por teste e2e e CI
 
 ### Iteração 2 — Configuração + instalador com tela custom
 

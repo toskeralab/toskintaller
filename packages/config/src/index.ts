@@ -22,6 +22,36 @@ const inputSchema = z.object({
   entry: z.string().default("index.html"),
 });
 
+/**
+ * Janela do shell Electron (RF3 — como o app é exibido no desktop).
+ * Obrigatória no modo standalone; ignorada no modo installer (Iteração 2).
+ */
+const windowSchema = z
+  .object({
+    width: z.number().int().min(320).default(1280),
+    height: z.number().int().min(240).default(800),
+    minWidth: z.number().int().min(200).default(960),
+    minHeight: z.number().int().min(150).default(600),
+    autoHideMenuBar: z.boolean().default(true),
+    title: z.string().optional(), // default: app.name
+    backgroundColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .default("#0f172a"),
+  })
+  .default({});
+
+/**
+ * Config do shell Electron (template versionado no repo — pré-requisito de
+ * reprodutibilidade, ver §5 Notas operacionais do PLANO_IMPLEMENTACAO.md).
+ */
+const electronSchema = z
+  .object({
+    /** Versão do Electron pinada — parte da chave de cache do target standalone. */
+    version: z.string().default("33.2.0"),
+  })
+  .default({});
+
 const bannerSchema = z.object({
   type: z.enum(["image", "gradient"]).default("gradient"),
   src: z.string().optional(),
@@ -87,6 +117,8 @@ export const manifestSchema = z.object({
   app: appSchema,
   input: inputSchema,
   mode: z.enum(["standalone", "installer"]).default("installer"),
+  window: windowSchema,
+  electron: electronSchema,
   installScreen: installScreenSchema.default({}),
   installer: installerSchema.default({}),
   artifact: artifactSchema,
@@ -95,3 +127,4 @@ export const manifestSchema = z.object({
 export type Manifest = z.infer<typeof manifestSchema>;
 export type ProgressStyle = z.infer<typeof progressStyleSchema>;
 export type Supplemental = z.infer<typeof supplementalSchema>;
+export type WindowConfig = z.infer<typeof windowSchema>;
