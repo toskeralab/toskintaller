@@ -15,6 +15,6 @@
   },
   "devDependencies": {},
   "scripts": {
-    "build": "tsx ../../../scripts/electron:bundle"
+    "build": "tsx ../../../scripts/electron-bundle"
   }
 }

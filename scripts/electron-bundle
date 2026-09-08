@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //
-// scripts/electron:bundle — empacotamento determinístico do Electron (Iteração 1).
+// scripts/electron-bundle — empacotamento determinístico do Electron (Iteração 1).
 //
 // Por quê um script próprio e não puro app-builder-lib?
 // A lib expõe uma API muitas vezes entre versões-frameworks instáveis; o CLI do
