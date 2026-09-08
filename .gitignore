@@ -6,3 +6,5 @@ release/
 .DS_Store
 .spike-work/
 apps/ui/dist/
+apps/ui/test-results/
+apps/ui/playwright-report/

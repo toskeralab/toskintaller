@@ -17,7 +17,7 @@
 | **M7 — UI wizard + preview** | React/Vite/shadcn: passos do fluxo, editor da tela de instalação, preview ao vivo usando a mesma template/config do instalador, cliente da API local | L |
 | **M8 — installer-html (pós-MVP)** | Renderer de instalação em HTML/CSS/JS (shell Electron dedicado): animações ricas, paridade total com preview | L |
 | **M9 — Verificação & integridade** | Suíte `verify`: manifest de checksums, smoke (boot do exe / install silencioso em Windows), checagem de reprodutibilidade, relatório | M |
-| **M10 — Registry de targets** | Evolução do M1: matriz de capacidades, requisitos de host por target, preparação para Linux/Android/Apple | S (transversal) |
+| **M10 — Registry de targets** | Evolução do M1: matriz de capacidades, requisitos de host por target, preparação para Linux/Android/Apple | S (transversal) — **entregue na Iteração 4** |
 
 ### Grafo de dependências
 
@@ -84,25 +84,29 @@ Módulos: **M3, M6**.
 
 Módulo: **M7**.
 
-- [ ] `toskintaller ui` — wizard em 5 passos (input → modo → tela de instalação → complementares → build)
-- [ ] Editor da tela de instalação com preview ao vivo (mesma template/config do instalador)
-- [ ] API local segura (bind `127.0.0.1` + token de sessão)
+- [x] `toskintaller ui` — wizard em 5 passos (input → modo → tela de instalação → complementares → build)
+- [x] Editor da tela de instalação com preview ao vivo (mesma template/config do instalador)
+- [x] API local segura (bind `127.0.0.1` + token de sessão)
+
+**Status**: entregue ✓ — [ITERACAO_3.md](./ITERACAO_3.md).
 
 **Exit criteria**:
-- Jornada completa do MVP sem tocar em CLI (docs/MVP.md: passos 2–6)
-- Preview fiel ao instalador final; UI validada com Playwright
+- [x] Jornada completa do MVP sem tocar em CLI (docs/MVP.md: passos 2–6)
+- [x] Preview fiel ao instalador final; UI validada com Playwright (cobertura Playwright entregue na Iteração 4)
 
 ### Iteração 4 — Verificação, CI e hardening
 
 Módulos: **M9, M10** + CI.
 
-- [ ] Suíte `verify` completa (checksums, smoke, reprodutibilidade)
-- [ ] GitHub Actions: lint/unit em ubuntu; build real + smoke em `windows-latest`
-- [ ] Tuning de performance (cache, compressão paralela), mitigação de antivírus revisada, docs atualizadas
+- [x] Suíte `verify` completa (checksums, smoke, reprodutibilidade)
+- [x] GitHub Actions: lint/unit em ubuntu; build real + smoke em `windows-latest`
+- [x] Tuning de performance (cache, compressão paralela), mitigação de antivírus revisada, docs atualizadas
+
+**Status**: entregue ✓ — [ITERACAO_4.md](./ITERACAO_4.md).
 
 **Exit criteria**:
-- CI produz artefato verificado a cada merge (Windows runner)
-- Documentação de uso (README + guia do dev) cobre fluxo completo
+- [x] CI produz artefato verificado a cada merge (Windows runner)
+- [x] Documentação de uso (README + guia do dev) cobre fluxo completo
 
 ### Iteração 5 — Pós-MVP (evolução)
 

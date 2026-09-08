@@ -3,28 +3,28 @@
 // scripts/electron-bundle — empacotamento determinístico do Electron (Iteração 1).
 //
 // Por quê um script próprio e não puro app-builder-lib?
-// A lib expõe uma API muitas vezes entre versões-frameworks instáveis; o CLI do
-// electron-builder é a interface que a biblioteca testa, enquanto nosso bundler é
-// “nada além do electron-builder” (stack acordada). Um script próprio deixa o CLI
-// sermos os próprios mantenedores da versão de env, arquivos a ignorar e cache.
+// A lib expõe uma API que muda entre versões; o CLI do electron-builder é a
+// interface que a biblioteca testa. Um script próprio nos deixa ser os
+// mantenedores da versão de env, arquivos a ignorar e cache.
 //
 // O que garantimos aqui:
 //  - SOURCE_DATE_EPOCH fixo (asar + PE headers + NSIS portable);
-//  - arquivos de cache fora do dist do projeto (os resultados não fogem dos builds);
-//  - compatibilidade do Node com Electron samenão via ELECTRON_RUN_AS_NODE;
+//  - cache do electron-builder fora do workspace (não polui os build outputs);
+//  - compatibilidade Node ↔ Electron via ELECTRON_RUN_AS_NODE quando aplicável;
 //  - reprodutibilidade entre máquinas quando as versões de tooling forem idênticas.
 //
-// Por que não TS (Vitest/contexto de testes): o bundler é um hardcoded externo; o
-// codeco em JS puro aqui diminui a dependência no próprio pipeline de testes (nosso
-// próprio TS seria um “construtor dentro do construído”).
+// Nota (Iteração 4/hardening): este script é o caminho "legado" do empacotamento
+// (spike). O pipeline atual usa o adapter windows-standalone
+// (packages/targets/standalone), que já embute as mesmas garantias de
+// determinismo e cache. Mantido para compatibilidade do workflow spike-windows.
 
 "use strict";
 
-const { execSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 const { resolve } = require("node:path");
+const { existsSync } = require("node:fs");
 
 const ELECTRON_BUILDER_BIN = resolve(__dirname, "..", "node_modules", ".bin", "electron-builder");
-const ELECTRON_BUILDER_LIB_DIR = resolve(__dirname, "..", "node_modules", ".pnpm", "electron-builder@24.13.3_electron-builder-squirrel-windows@24.13.3", "node_modules", "electron-builder");
 const RENDER_DIR = resolve(__dirname, "..", "render");
 
 emit("bundle");
@@ -33,31 +33,39 @@ emit("bundle");
 process.env.SOURCE_DATE_EPOCH = "1704067200";
 // NSIS_SOURCE_DATE_EPOCH: portable usa internamente NSIS — o spike já validou esse fixo
 process.env.NSIS_SOURCE_DATE_EPOCH = "1704067200";
-// electron-builder != CI; evita mensagens de aviso e variáveis de ambiente de máquina
+// comportamento estável igual CI (evita avisos/variáveis de máquina)
 process.env.CI = "true";
-// cache fora do workspace para não poluir os build outputs (embelezamento)
+// cache fora do workspace para não poluir os build outputs (hardening Iteração 4)
 process.env.ELECTRON_BUILDER_CACHE = resolve(__dirname, "..", ".cache", "electron-builder");
 
-const env = { ...process.env, NO_UPDATE_NOTIFIER: "1" };
-
-// electron-builder resolve electron via package.json do projeto (productName etc.)
-// pelo menos para mobile / Electron nativo; não colocamos o electron node_modules
-// dentro do git para não fazer commit de binários.
-const electronVersion = execSync("node -p \"require('electron/package.json').version\"", { encoding: "utf8" }).trim();
-emit(`electron ${electronVersion} · electron-builder ${execSync("node -p \"require('app-builder-lib/package.json').version\"", { encoding: "utf8" }).trim()}`);
+// electron-builder resolve electron via package.json do projeto (productName etc.);
+// não versionamos node_modules do electron no git (sem binários no repo).
+const electronVersion = execFileSync(
+  process.execPath,
+  ["-p", "require('electron/package.json').version"],
+  { encoding: "utf8" },
+).trim();
+emit(`electron ${electronVersion}`);
 
 // checklist rápido antes do build
-if (!require("fs").existsSync(Electron_BUILDER_BIN)) {
+if (!existsSync(ELECTRON_BUILDER_BIN)) {
   throw new Error(
     "electron-builder binário não encontrado — `pnpm add -D electron-builder` na raiz",
   );
 }
 
-execSync("node " + ELECTRON_BUILDER_LIB_DIR + "/cli.js --config ./electron-builder.json --projectDistDir " + RENDER_DIR, {stdio: "inherit"});
-  cwd: RENDER_DIR,
-  env,
-  stdio: "inherit",
-});
+execFileSync(
+  process.execPath,
+  [
+    ELECTRON_BUILDER_BIN,
+    "--win",
+    "--config",
+    resolve(RENDER_DIR, "electron-builder.json"),
+    "--projectDir",
+    RENDER_DIR,
+  ],
+  { stdio: "inherit", env: { ...process.env, NO_UPDATE_NOTIFIER: "1" } },
+);
 
 function emit(msg) {
   process.stdout.write(msg + "\n");

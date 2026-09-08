@@ -8,7 +8,10 @@ import { runPipeline } from "@toskintaller/core";
 import type { Manifest } from "@toskintaller/config";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const UI_DIST = path.resolve(process.cwd(), "apps", "ui", "dist");
+// apps/cli/src/server/ → raiz do monorepo = 4 níveis acima (server → src → cli → apps → raiz).
+// Resolvido a partir do arquivo (import.meta.dirname), não do cwd — o webServer do
+// Playwright roda com cwd em apps/ui e o caminho relativo ao cwd não encontraria o dist.
+const UI_DIST = path.resolve(import.meta.dirname, "..", "..", "..", "..", "apps", "ui", "dist");
 
 function contentForPath(p: string): string | null {
   const ext = path.extname(p).toLowerCase();

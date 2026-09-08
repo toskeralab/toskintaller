@@ -53,6 +53,39 @@ export interface TargetAdapter {
   bundle(ctx: BuildContext): Promise<Artifact>;
 }
 
+/**
+ * M10 — Matriz de capacidades e status de um target no registry.
+ * Preparação estrutural para Linux/Android/Apple: novos adapters declaram
+ * capabilities/status aqui, sem alterar o pipeline (que continua chamando
+ * apenas render/bundle).
+ */
+export type TargetStatus = "available" | "planned";
+
+export interface TargetCapabilities {
+  /** Modos de artefato suportados (RF3). */
+  modes: TargetMode[];
+  /** Estilos de progresso suportados quando o target gera instalador com tela custom (S0.4). */
+  progressStyles?: string[];
+  /** Suporta instalações complementares (RF4). */
+  supplementalInstalls?: boolean;
+  /** Suporta atalhos (Start Menu/Desktop) — instaladores. */
+  shortcuts?: boolean;
+  /** Suporta desinstalador — instaladores. */
+  uninstaller?: boolean;
+  /** Suporta silent mode (flags /S). */
+  silentMode?: boolean;
+  /** Extensões dos artefatos produzidos. */
+  artifactExtensions: string[];
+}
+
+/** Entrada estendida no registry (M10): adapter + metadados de capacidade. */
+export interface TargetRegistryEntry {
+  adapter: TargetAdapter;
+  /** "available" (funciona hoje) ou "planned" (estrutura preparada, adapter futuro). */
+  status: TargetStatus;
+  capabilities: TargetCapabilities;
+}
+
 /** Relatório final do pipeline. */
 export interface BuildReport {
   target: string;
@@ -62,41 +95,82 @@ export interface BuildReport {
   inputFingerprint: string;
 }
 
-// ── Registry de targets (RF2 / M10) ──────────────────────────────────
+// ── Registry de targets (RF2 / M10) ──────────────────────────────
 
-const registry = new Map<string, TargetAdapter>();
+const registry = new Map<string, TargetRegistryEntry>();
 
-/** Registra um target adapter (chamado pelo CLI/testes que importam os packages). */
-export function registerTarget(target: TargetAdapter): void {
-  registry.set(target.id, target);
+/**
+ * Registra um target adapter com sua matriz de capacidades (M10).
+ * Compatível com chamadas antigas: sem meta, capacidades são derivadas do modo.
+ */
+export function registerTarget(target: TargetAdapter, meta?: Omit<TargetRegistryEntry, "adapter">): void {
+  registry.set(target.id, {
+    adapter: target,
+    status: meta?.status ?? "available",
+    capabilities: meta?.capabilities ?? {
+      modes: [target.mode],
+      artifactExtensions: [".exe"],
+    },
+  });
 }
 
-/** Busca um target pelo id (ex.: `--target=windows-standalone`). */
-export function getTarget(id: string): TargetAdapter {
-  const target = registry.get(id);
-  if (!target) {
+/** Busca a entrada completa do registry pelo id (adapter + capacidades). */
+export function getTargetEntry(id: string): TargetRegistryEntry {
+  const entry = registry.get(id);
+  if (!entry) {
     throw new Error(
-      `[registry] target '${id}' não registrado. Registrados: ${[...registry.keys()].join(", ") || "(nenhum)"}`,
+      `[registry] target '${id}' não registrado. Registrados: ${[...registry.keys()].join(', ') || '(nenhum)'}`,
     );
   }
-  return target;
+  return entry;
+}
+
+/** Busca um target pelo id (ex.: --target=windows-standalone). */
+export function getTarget(id: string): TargetAdapter {
+  return getTargetEntry(id).adapter;
 }
 
 /** Targets registrados (para diagnóstico do CLI). */
 export function registeredTargets(): TargetAdapter[] {
+  return [...registry.values()].map((e) => e.adapter);
+}
+
+/** Entradas completas do registry (M10 — matriz de capacidades). */
+export function registeredTargetEntries(): TargetRegistryEntry[] {
   return [...registry.values()];
+}
+
+/**
+ * M10 — Declara um target planejado (Linux/Android/Apple) SEM adapter real.
+ * Aparece na matriz de capacidades do CLI (`toskintaller targets`) como "planned";
+ * `resolveTarget` nunca o escolhe. Quando o adapter for implementado (Iteração 5),
+ * basta registrar com registerTarget(adapter, meta) usando o mesmo id.
+ */
+export function declarePlannedTarget(
+  id: string,
+  mode: TargetMode,
+  hostRequirements: { os: string[]; arch: string[] },
+  capabilities: TargetCapabilities,
+): void {
+  registry.set(id, { adapter: { id, mode, hostRequirements, render: notImplemented, bundle: notImplemented }, status: "planned", capabilities });
+}
+
+function notImplemented(): Promise<never> {
+  return Promise.reject(new Error("[registry] target planejado: adapter ainda não implementado (Iteração 5)"));
 }
 
 /** RF2: escolhe o target a partir do modo do manifest (Windows por padrão). */
 export function resolveTarget(manifest: Pick<Manifest, "mode">): TargetAdapter {
-  const matches = registeredTargets().filter((t) => t.mode === manifest.mode);
+  const matches = registeredTargetEntries().filter(
+    (e) => e.status === "available" && e.adapter.mode === manifest.mode,
+  );
   if (matches.length === 0) {
     throw new Error(
-      `[registry] nenhum target registrado para o modo '${manifest.mode}' (RF2). ` +
+      `[registry] nenhum target disponível para o modo '${manifest.mode}' (RF2). ` +
         `Registrados: ${[...registry.keys()].join(", ") || "(nenhum)"}`,
     );
   }
-  return matches[0];
+  return matches[0].adapter;
 }
 
 /**
@@ -115,7 +189,7 @@ export async function runPipeline(ctx: BuildContext): Promise<BuildReport> {
   const normalizeDir = path.join(ctx.workDir, "normalize");
   await runNormalize(input, manifest, normalizeDir);
 
-  // 3. stage — cópia determinística (incremental entra no tuning da Iteração 4)
+  // 3. stage — cópia determinística com paralelismo limitado (tuning Iteração 4)
   const stageDir = path.join(ctx.workDir, "stage");
   await copyTree(normalizeDir, stageDir);
 
@@ -150,25 +224,51 @@ export async function runPipeline(ctx: BuildContext): Promise<BuildReport> {
 }
 
 /**
- * Cópia recursiva simples e determinística (ordem estável + mtime fixo).
+ * Cópia recursiva determinística (ordem estável + mtime fixo).
  * makensis e o empacotamento do electron-builder embutem mtimes dos arquivos
  * no artefato; sem mtime fixo, dois builds da mesma entrada geram hashes diferentes.
+ *
+ * Hardening (Iteração 4): a cópia dos ARQUIVOS roda em paralelo com concorrência
+ * limitada (mapLimit). O determinismo não depende da ordem de cópia: conteúdo é
+ * idêntico e o mtime é fixo — o empacotador (makensis/asar) ordena por conta dele.
  */
 const FIXED_MTIME = new Date("2024-01-01T00:00:00Z");
+
+/** Concorrência da cópia: alta o bastante para saturar I/O, baixa o bastante para
+ * não esgotar file descriptors em árvores grandes (tuning Iteração 4). */
+const COPY_CONCURRENCY = 16;
+
+/** Executa `fn` sobre cada item com no máximo `limit` promessas em voo (ordem de
+ * resultados preservada; erros propagam após todas as tarefas em voo assentarem). */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 export async function copyTree(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = (await fs.readdir(src, { withFileTypes: true })).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  const files = entries.filter((e) => !e.isDirectory());
+  // Diretórios primeiro (sequencial, cria a árvore de destino)…
   for (const e of entries) {
-    const s = path.join(src, e.name);
-    const d = path.join(dest, e.name);
     if (e.isDirectory()) {
-      await copyTree(s, d);
-    } else {
-      await fs.copyFile(s, d);
-      await fs.utimes(d, FIXED_MTIME, FIXED_MTIME);
+      await copyTree(path.join(src, e.name), path.join(dest, e.name));
     }
   }
+  // …depois todos os arquivos deste nível em paralelo limitado.
+  await mapLimit(files, COPY_CONCURRENCY, async (e) => {
+    const d = path.join(dest, e.name);
+    await fs.copyFile(path.join(src, e.name), d);
+    await fs.utimes(d, FIXED_MTIME, FIXED_MTIME);
+  });
 }

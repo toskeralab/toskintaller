@@ -5,23 +5,62 @@ import { manifestSchema, PROGRESS_STYLES, type ProgressStyle } from "@toskintall
 import {
   runPipeline,
   registerTarget,
+  declarePlannedTarget,
   resolveTarget,
   registeredTargets,
+  registeredTargetEntries,
   getTarget,
   type BuildContext,
 } from "@toskintaller/core";
 import { installerNsisTarget } from "@toskintaller/installer-nsis";
 import { standaloneWindowsTarget } from "@toskintaller/standalone";
-import { sha256File } from "@toskintaller/verify";
+import { sha256File, smokeBootExe, smokeSilentInstall, checkReproducibility, writeVerifyReport, type VerifyReport, type ReproducibilityResult } from "@toskintaller/verify";
 
 // Registry (RF2/M10): a CLI registra os targets disponíveis; a escolha é por modo do
-// manifest (standalone/installer) ou explícita via --target.
-registerTarget(installerNsisTarget);
+// manifest (standalone/installer) ou explícita via --target. Cada registro carrega a
+// matriz de capacidades (M10) exibida por `toskintaller targets`.
+registerTarget(installerNsisTarget, {
+  status: "available",
+  capabilities: {
+    modes: ["installer"],
+    progressStyles: [...PROGRESS_STYLES],
+    supplementalInstalls: true,
+    shortcuts: true,
+    uninstaller: true,
+    silentMode: true,
+    artifactExtensions: [".exe"],
+  },
+});
 // modo do installer-nsis no spike era implícito ("installer"); garantido pelo adapter
 if (!installerNsisTarget.mode) {
   (installerNsisTarget as { mode?: string }).mode = "installer";
 }
-registerTarget(standaloneWindowsTarget);
+registerTarget(standaloneWindowsTarget, {
+  status: "available",
+  capabilities: {
+    modes: ["standalone"],
+    artifactExtensions: [".exe"],
+  },
+});
+
+// M10 — preparação estrutural para plataformas futuras (Iteração 5):
+// aparecem na matriz como "planned"; resolveTarget nunca os escolhe.
+declarePlannedTarget("linux-standalone", "standalone", { os: ["linux"], arch: ["x64"] }, {
+  modes: ["standalone"],
+  artifactExtensions: [".AppImage"],
+});
+declarePlannedTarget("linux-installer", "installer", { os: ["linux"], arch: ["x64"] }, {
+  modes: ["installer"],
+  artifactExtensions: [".deb", ".AppImage"],
+});
+declarePlannedTarget("android-standalone", "standalone", { os: ["android"], arch: ["arm64"] }, {
+  modes: ["standalone"],
+  artifactExtensions: [".apk"],
+});
+declarePlannedTarget("apple-standalone", "standalone", { os: ["darwin"], arch: ["arm64", "x64"] }, {
+  modes: ["standalone"],
+  artifactExtensions: [".dmg", ".app.zip"],
+});
 
 interface BuildOptions {
   config: string;
@@ -116,7 +155,10 @@ program
   .description("Confere o sha256 do artefato contra o integrity.json do build")
   .requiredOption("--artifact <path>", "caminho do .exe")
   .requiredOption("--integrity <path>", "caminho do integrity.json")
-  .action(async (opts: { artifact: string; integrity: string }) => {
+  .option("--smoke", "executa os smokes da suíte verify (boot/PE + silent install em Windows) e grava o relatório M9")
+  .option("--report <path>", "caminho do relatório verify-report.json (com --smoke)")
+  .option("--repro-hash <hash>", "hash sha256 de um segundo build da mesma entrada — checagem de reprodutibilidade (M9)")
+  .action(async (opts: { artifact: string; integrity: string; smoke?: boolean; report?: string; reproHash?: string }) => {
     try {
       const integrity = JSON.parse(await fs.readFile(opts.integrity, "utf8")) as {
         files: Record<string, string>;
@@ -125,11 +167,55 @@ program
       if (!expected) {
         throw new Error(`artefato não registrado no integrity.json: ${path.basename(opts.artifact)}`);
       }
-      const actual = await sha256File(path.resolve(opts.artifact));
+      const artifactPath = path.resolve(opts.artifact);
+      const actual = await sha256File(artifactPath);
       if (actual !== expected) {
         throw new Error(`checksum difere\n  esperado: ${expected}\n  atual:    ${actual}`);
       }
       console.log(`✔ artefato íntegro: ${path.basename(opts.artifact)} (${actual.slice(0, 16)}…)`);
+
+      // M9 — checagem de reprodutibilidade: hash de um segundo build independente
+      let reproducibility: ReproducibilityResult | undefined;
+      if (opts.reproHash) {
+        reproducibility = checkReproducibility(actual, opts.reproHash);
+        const mark = reproducibility.passed ? "✔" : "✖";
+        console.log(
+          `${mark} reprodutibilidade: ${reproducibility.passed ? "hashes idênticos" : `hashes divergem (${reproducibility.hashA.slice(0, 16)}… vs ${reproducibility.hashB.slice(0, 16)}…)`}`,
+        );
+      }
+
+      if (opts.smoke) {
+        const smokes = [await smokeBootExe(artifactPath)];
+        // silent-install: aplica-se a instaladores; em hosts não-Windows fica
+        // "skipped" no relatório — a validação real é do CI windows-latest.
+        if (path.basename(artifactPath).toLowerCase().includes("setup")) {
+          smokes.push(
+            await smokeSilentInstall(
+              artifactPath,
+              path.join(process.env.LOCALAPPDATA ?? ".", "Example App", "index.html"),
+            ),
+          );
+        }
+        const report: VerifyReport = {
+          artifact: path.basename(artifactPath),
+          sha256: actual,
+          smokes,
+          reproducibility,
+          ok: smokes.every((s) => s.passed) && (reproducibility?.passed ?? true),
+          generatedAt: new Date().toISOString(),
+        };
+        for (const s of smokes) {
+          const mark = s.passed ? "✔" : "✖";
+          console.log(`${mark} smoke ${s.name}: ${s.passed ? "ok" : s.error} (${s.durationMs}ms)`);
+        }
+        if (opts.report) {
+          await writeVerifyReport(report, path.resolve(opts.report));
+          console.log(`✔ relatório verify: ${opts.report}`);
+        }
+        if (!report.ok) {
+          throw new Error("suíte verify falhou (smoke)");
+        }
+      }
     } catch (err) {
       console.error(`✖ verify: ${(err as Error).message}`);
       process.exitCode = 1;
@@ -138,10 +224,23 @@ program
 
 program
   .command("targets")
-  .description("Lista os target adapters registrados (RF2)")
+  .description("Lista os target adapters registrados (RF2) com a matriz de capacidades (M10)")
   .action(() => {
-    for (const t of registeredTargets()) {
-      console.log(`${t.id.padEnd(22)} mode=${t.mode.padEnd(10)} host=${t.hostRequirements.os.join("|")}`);
+    for (const entry of registeredTargetEntries()) {
+      const t = entry.adapter;
+      const c = entry.capabilities;
+      const status = entry.status === "available" ? "✓" : "planned";
+      console.log(
+        `${t.id.padEnd(22)} mode=${t.mode.padEnd(10)} host=${t.hostRequirements.os.join("|")} status=${status}`,
+      );
+      const caps: string[] = [];
+      if (c.progressStyles?.length) caps.push(`styles=${c.progressStyles.join("/")}`);
+      if (c.supplementalInstalls) caps.push("supplemental");
+      if (c.shortcuts) caps.push("shortcuts");
+      if (c.uninstaller) caps.push("uninstaller");
+      if (c.silentMode) caps.push("silent");
+      caps.push(`artifacts=${c.artifactExtensions.join(",")}`);
+      console.log(`  ${"".padEnd(20)} ${caps.join(" ")}`);
     }
   });
 

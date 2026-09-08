@@ -8,8 +8,9 @@ on:
 
 jobs:
   windows:
-    name: Windows build + verify (Iteração 1)
+    name: Windows build + verify + smoke (Iteração 4)
     runs-on: windows-latest
+    timeout-minutes: 45
     env:
       SOURCE_DATE_EPOCH: "1704067200"
       NSIS_SOURCE_DATE_EPOCH: "1704067200"
@@ -35,6 +36,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      # Hardening (Iteração 4): cacheia downloads de toolchain entre runs.
+      # O conteúdo do cache não entra no artefato (reprodutibilidade mantida);
+      # só evita re-baixar Electron/NSIS-portable a cada job.
+      - name: Cache Electron/electron-builder downloads (hardening)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -43,17 +55,24 @@ jobs:
 
       - name: Install NSIS (Windows)
         run: |
-          choco install nsis -y
+          choco install nsis -y --no-progress
           Write-Host "makensis=$env:PATH" -ForegroundColor Green
           where.exe makensis
 
+      # M9/M10: makensis do choco não entra no PATH do runner de forma confiável;
+      # o spike-windows.yml já provou o caminho fixo. Sem isso o build:spike falha
+      # com "makensis não encontrado".
       - name: Build installer (5 estilos — RF3 modo 2 / S0.4)
+        env:
+          NSIS_MAKENSIS: "C:\\Program Files (x86)\\NSIS\\makensis.exe"
         run: pnpm build:spike
 
       - name: Build standalone (RF3 modo 1)
         run: pnpm build:standalone
 
       - name: Verify installer artifacts
+        env:
+          NSIS_MAKENSIS: "C:\\Program Files (x86)\\NSIS\\makensis.exe"
         run: |
           $styles = "smooth","marquee","pulse","bars","dots"
           foreach ($s in $styles) {
@@ -62,11 +81,12 @@ jobs:
             tsx apps/cli/src/index.ts verify --artifact $exe --integrity $int
           }
 
-      - name: Verify standalone artifact
+      - name: Verify standalone artifact (com smoke M9)
         run: |
           tsx apps/cli/src/index.ts verify `
             --artifact release/standalone/standalone/ExampleApp-1.0.0.exe `
-            --integrity release/standalone/standalone/integrity.json
+            --integrity release/standalone/standalone/integrity.json `
+            --smoke --report release/standalone/standalone/verify-report.json
 
       - name: Reprodutibilidade (dois builds independentes → mesmo hash)
         run: |
@@ -90,6 +110,26 @@ jobs:
           $f = "release/standalone/standalone/ExampleApp-1.0.0.exe"
           if (Test-Path $f) { Write-Host "standalone : $(Split-Path $f -Leaf) ($((Get-Item $f).Length) bytes)" }
 
+      - name: Smoke de instalação silenciosa (instalador, Windows real — M9)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = "release/spike/smooth/ExampleApp-Setup-1.0.0.exe"
+          $installDir = Join-Path $env:LOCALAPPDATA "Example App"
+          & $setup /S
+          if ($LASTEXITCODE -ne 0) { throw "instalação silenciosa falhou: exit=$LASTEXITCODE" }
+          $entry = Join-Path $installDir "index.html"
+          if (-not (Test-Path $entry)) { throw "index.html não instalado em $installDir" }
+          $content = Get-Content $entry -Raw
+          if ($content -notmatch "__TOSKINSTALLER__") { throw "stamp não presente no index.html instalado" }
+          Write-Host "✔ smoke silent-install OK ($installDir)"
+          # desinstala para não poluir o runner
+          $uninstaller = Join-Path $installDir "Uninstall.exe"
+          if (Test-Path $uninstaller) {
+            & $uninstaller /S
+            Start-Sleep -Seconds 1
+          }
+
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -97,9 +137,52 @@ jobs:
           path: release/spike/**/*.exe
           if-no-files-found: error
 
-      - name: Upload standalone artifact
+      - name: Upload standalone artifact + relatório verify (M9)
         uses: actions/upload-artifact@v4
         with:
           name: standalone-windows
-          path: release/standalone/**/*.exe
+          path: |
+            release/standalone/**/*.exe
+            release/standalone/**/verify-report.json
           if-no-files-found: error
+
+  wizard-playwright:
+    name: Wizard UI (Playwright, Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      # O store do pnpm já é cacheado pelo actions/setup-node (cache: pnpm);
+      # um segundo cache manual de ~/.pnpm-store é redundante.
+      - name: Cache navegadores Playwright (hardening)
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Build do wizard estático
+        run: pnpm --filter toskintaller-ui build
+
+      - name: Instalar Playwright (Chromium)
+        # @playwright/test já está no package.json/lockfile — só o browser precisa
+        # ser baixado (e é cacheado pelo step acima).
+        run: pnpm --filter toskintaller-ui exec playwright install chromium --with-deps
+
+      - name: Testes e2e do wizard
+        run: pnpm --filter toskintaller-ui test:e2e

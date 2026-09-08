@@ -1,0 +1,39 @@
+name: ci-ubuntu
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-unit:
+    name: Lint + unit (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (lint de tipos)
+        run: pnpm typecheck
+
+      - name: Testes unitários + de contrato
+        run: pnpm test
+
+      - name: Matriz de targets (M10) — sanity check
+        run: pnpm exec tsx apps/cli/src/index.ts targets
