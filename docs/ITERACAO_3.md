@@ -55,3 +55,24 @@ O fluxo original do `toskintaller ui` servia apenas as rotas `/api/*`; a UI Reac
 - O servidor local da CLI (`apps/cli/src/server/index.ts`) agora serve o build estático do wizard (`apps/ui/dist`) em `127.0.0.1:3000`, com `/api/*` tendo prioridade e SPA fallback para `index.html`.
 - O Vite de dev (`apps/ui/vite.config.ts`) usa porta `5173` e proxy `/api` → `http://127.0.0.1:3000` para desenvolvimento.
 - O comando `pnpm ui` (ou `toskintaller ui`) abre o wizard completo em `http://127.0.0.1:3000` com scan de pasta, preview ao vivo e geração do .exe funcionando pela mesma origem.
+
+## 6. Hotfix: assets estáticos com MIME errado (tela branca)
+
+**Sintoma**: o wizard abria com a tela em branco. O browser recusava o bundle com `Failed to load module script: MIME type text/html`.
+
+**Causa raiz**: `serveStatic` montava o caminho com `path.resolve(UI_DIST, req.url)`. Como `req.url` começa com `/` (caminho **absoluto**), `path.resolve` descarta `UI_DIST` e resolve para a raiz do disco (`/assets/...` no Linux, `C:\assets\...` no Windows). O arquivo não existe, `fs.stat` falha, o request caía no SPA fallback, que devolvia `index.html` com `Content-Type: text/html` para `.js`/`.css`. O smoke original só checava status 200 e não pegava o erro.
+
+**Correção** (`apps/cli/src/server/index.ts`):
+- Nova `resolveStaticPath()`: extrai o pathname limpo via `new URL(req.url, base).pathname` (sem query string), decodifica `%XX`, remove barras iniciais e monta com `path.join(UI_DIST, relativo)` — nunca `path.resolve` com pathname absoluto.
+- Proteção contra path traversal validada após normalização (`startsWith(UI_DIST + path.sep)`).
+- Asset sob `/assets/` inexistente ou não-arquivo responde **404 real** — nunca cai no SPA fallback (impede MIME errado para `.js`/`.css`).
+- `findIndexHtml` reutiliza a mesma resolução segura.
+- `PORT` agora configurável via env (default 3000) para permitir teste em porta isolada.
+
+**Regressão coberta** (`tests/server-static.test.ts`):
+- `GET /assets/*.js` → 200 + `Content-Type: application/javascript` (corpo é JS, não HTML)
+- `GET /assets/*.css` → 200 + `text/css`
+- `GET /assets/inexistente.js` → 404 real, sem `text/html`
+- `GET /` → 200 + `text/html` (SPA fallback legítimo)
+
+**Validação**: typecheck limpo, 17/17 testes verdes, smoke com `curl -I` confirmando headers (`application/javascript` para o bundle, 404 para asset inexistente e para tentativa de traversal).
