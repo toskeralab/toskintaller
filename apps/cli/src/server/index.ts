@@ -7,7 +7,7 @@ import { generateGradientBmp } from "@toskintaller/installer-nsis";
 import { runPipeline } from "@toskintaller/core";
 import type { Manifest } from "@toskintaller/config";
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT ?? 3000);
 const UI_DIST = path.resolve(process.cwd(), "apps", "ui", "dist");
 
 function contentForPath(p: string): string | null {
@@ -28,23 +28,48 @@ function contentForPath(p: string): string | null {
   );
 }
 
-async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
-  const url = req.url ?? "/";
-  const decoded = decodeURIComponent(url);
-  const statPath = path.resolve(UI_DIST, decoded);
-
-  // Proteção contra path traversal
-  if (!statPath.startsWith(UI_DIST)) return false;
-
+/**
+ * Resolve o caminho absoluto de um asset estático a partir da URL do request,
+ * de forma SEGURA e independente de plataforma:
+ *  - extrai o pathname limpo (sem query string) via new URL();
+ *  - decodifica %XX e remove barras iniciais → caminho RELATIVO;
+ *  - monta com path.join(UI_DIST, relativo) — NUNCA path.resolve(UI_DIST, pathnameAbsoluto),
+ *    pois pathname absoluto descartaria a base e resolveria fora de UI_DIST;
+ *  - valida contra path traversal após normalização.
+ * Retorna null se o caminho for inválido/escapar de UI_DIST.
+ */
+async function resolveStaticPath(reqUrl: string): Promise<string | null> {
+  let pathname: string;
   try {
-    const stat = await fs.stat(statPath);
+    pathname = decodeURIComponent(new URL(reqUrl, "http://127.0.0.1").pathname);
+  } catch {
+    return null; // URL/percent-encoding malformado
+  }
+  const rel = pathname.replace(/^\/+/, "");
+  if (rel === "") return null;
+  const resolved = path.join(UI_DIST, rel);
+  // Proteção contra path traversal (após normalização do path.join)
+  if (resolved !== UI_DIST && !resolved.startsWith(UI_DIST + path.sep)) return null;
+  return resolved;
+}
+
+async function sendStaticFile(filePath: string, res: ServerResponse): Promise<void> {
+  const body = await fs.readFile(filePath);
+  const ct = contentForPath(filePath);
+  res.statusCode = 200;
+  res.setHeader("Content-Type", ct ?? "application/octet-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.end(body);
+}
+
+/** Tenta servir um arquivo estático. Retorna false se não existir/não for arquivo. */
+async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const filePath = await resolveStaticPath(req.url ?? "/");
+  if (!filePath) return false;
+  try {
+    const stat = await fs.stat(filePath);
     if (!stat.isFile()) return false;
-    const body = await fs.readFile(statPath);
-    const ct = contentForPath(statPath);
-    res.statusCode = 200;
-    res.setHeader("Content-Type", ct ?? "application/octet-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.end(body);
+    await sendStaticFile(filePath, res);
     return true;
   } catch {
     return false;
@@ -210,14 +235,13 @@ async function handleArtifact(req: IncomingMessage, res: ServerResponse): Promis
 }
 
 async function findIndexHtml(urlPath: string): Promise<string | null> {
-  const decoded = decodeURIComponent(urlPath);
-  const decodedPath = path.resolve(UI_DIST, decoded);
-  if (!decodedPath.startsWith(UI_DIST)) return null;
+  const resolved = await resolveStaticPath(urlPath);
+  if (!resolved) return null;
   try {
-    const stat = await fs.stat(decodedPath);
-    if (stat.isFile()) return decodedPath;
+    const stat = await fs.stat(resolved);
+    if (stat.isFile()) return resolved;
     if (stat.isDirectory()) {
-      const indexPath = path.join(decodedPath, "index.html");
+      const indexPath = path.join(resolved, "index.html");
       const iStat = await fs.stat(indexPath);
       if (iStat.isFile()) return indexPath;
     }
@@ -238,10 +262,17 @@ const server = createServer(async (req, res) => {
   if (url.startsWith("/api/build")) return handleBuild(req, res);
   if (url.startsWith("/api/artifact")) return handleArtifact(req, res);
 
-  // 2) Static assets do wizard (e.x.: /assets/index-xxx.js, /assets/index-xxx.css)
+  // 2) Static assets do wizard (ex.: /assets/index-xxx.js, /assets/index-xxx.css)
   if (url.startsWith("/assets/")) {
     const served = await serveStatic(req, res);
     if (served) return;
+    // Asset inexistente ou não-arquivo: 404 REAL — NUNCA cair no SPA fallback.
+    // Cair no fallback devolveria index.html com Content-Type text/html para
+    // .js/.css, o browser recusa o módulo (MIME type error) e a tela fica branca.
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("not found");
+    return;
   }
 
   // 3) SPA fallback: qualquer outra rota retorna index.html (navegação interna do wizard)
